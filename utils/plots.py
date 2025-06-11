@@ -185,7 +185,7 @@ def plot_images(images, targets, paths=None, fname="images.jpg", names=None):
     annotator = Annotator(mosaic, line_width=round(fs / 10), font_size=fs, pil=True, example=names)
     for i in range(bs):
         x, y = int(w * (i // ns)), int(h * (i % ns))  # block origin
-        annotator.rectangle([x, y, x + w, y + h], None, (255, 255, 255), width=2)  # borders
+        annotator.rectangle([x, y, x + w, y + h], None, (255, 255, 255), width=1)  # borders
         if paths:
             annotator.text([x + 5, y + 5], text=Path(paths[i]).name[:40], txt_color=(220, 220, 220))  # filenames
         if len(targets) > 0:
