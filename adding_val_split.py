@@ -181,48 +181,156 @@
 
 
 #region flatten
+# import os
+# import shutil
+
+# # --- adjust these paths ---
+# SPLIT_DIR = r"C:\Users\Andrea Chiang\Downloads\Finished Annotations\FOR YOLO TRAINING_BBs_8--10-10_split_with_augemented"
+# DEST_DIR  = r"C:\Users\Andrea Chiang\Downloads\Finished Annotations\data_80-10-10_augmented"
+
+# # 1) create flat target folders
+# for data_type in ("images", "labels"):
+#     for split in ("train", "val", "test"):
+#         os.makedirs(os.path.join(DEST_DIR, data_type, split), exist_ok=True)
+
+# # 2) walk group → subfolder → images/labels splits
+# for group in os.listdir(SPLIT_DIR):
+#     group_path = os.path.join(SPLIT_DIR, group)
+#     if not os.path.isdir(group_path):
+#         continue
+
+#     # inside each group (e.g. ALL_resized), iterate its subfolders (23BM66, 24BMLY, …)
+#     for sub in os.listdir(group_path):
+#         sub_path = os.path.join(group_path, sub)
+#         if not os.path.isdir(sub_path):
+#             continue
+
+#         for data_type in ("images", "labels"):
+#             for split in ("train", "val", "test"):
+#                 src_dir = os.path.join(sub_path, data_type, split)
+#                 if not os.path.isdir(src_dir):
+#                     continue
+
+#                 dst_dir = os.path.join(DEST_DIR, data_type, split)
+#                 for fname in os.listdir(src_dir):
+#                     src = os.path.join(src_dir, fname)
+#                     # prefix with both group and subfolder to avoid any name clashes
+#                     new_name = f"{group}_{sub}_{fname}"
+#                     dst = os.path.join(dstir := dst_dir, new_name)
+#                     shutil.copy2(src, dst)
+
+# # 3) (optional) print counts to verify
+# for data_type in ("images", "labels"):
+#     for split in ("train", "val", "test"):
+#         cnt = len(os.listdir(os.path.join(DEST_DIR, data_type, split)))
+#         print(f"{data_type}/{split}: {cnt} files")
+
+# import os
+
+# # ─── CONFIG ──────────────────────────────────────────────────
+# BASE_LABEL_DIR = r"C:\Users\Andrea Chiang\Downloads\Finished Annotations\FOR YOLO TRAINING_80-10-10_split\data_80-10-10\labels"
+# SPLITS = ["train", "val", "test"]
+# CLASS_NAMES = {0: "ALL", 1: "HEM"}
+
+# for split in SPLITS:
+#     split_dir = os.path.join(BASE_LABEL_DIR, split)
+#     counts = {0: 0, 1: 0}
+#     for root, _, files in os.walk(split_dir):
+#         for fn in files:
+#             if not fn.lower().endswith(".txt"):
+#                 continue
+#             with open(os.path.join(root, fn), "r") as f:
+#                 for line in f:
+#                     parts = line.strip().split()
+#                     if not parts:
+#                         continue
+#                     cls = int(parts[0])
+#                     if cls in counts:
+#                         counts[cls] += 1
+
+#     total = sum(counts.values())
+#     print(f"\n=== {split.upper()} ({total} cells) ===")
+#     for cls, cnt in counts.items():
+#         print(f"{CLASS_NAMES[cls]:4s}: {cnt:5d}")
+
+# import os
+# import pandas as pd
+
+# LABEL_ROOT = r"C:\Users\Andrea Chiang\Downloads\Finished Annotations\FOR YOLO TRAINING_80-10-10_split\data_80-10-10\labels"
+# splits = ["train","val","test"]
+# rows = []
+
+# for split in splits:
+#     folder = os.path.join(LABEL_ROOT, split)
+#     for fn in os.listdir(folder):
+#         if not fn.endswith(".txt"):
+#             continue
+#         img_name = fn.replace(".txt", ".jpg")  # adjust if you use .png
+#         path = os.path.join(folder, fn)
+#         with open(path) as f:
+#             for line in f:
+#                 cls, x, y, w, h = line.strip().split()
+#                 rows.append({
+#                     "split": split,
+#                     "image": img_name,
+#                     "class": int(cls),
+#                     "x": float(x),
+#                     "y": float(y),
+#                     "w": float(w),
+#                     "h": float(h),
+#                 })
+
+# df = pd.DataFrame(rows)
+# print(f"Total boxes: {len(df)}")           # should be your ~6497
+# print(df["split"].value_counts())          # breakdown per split
+# print(df["class"].value_counts())          # ALL vs HEM counts
+# df.to_csv("yolo_annotations.csv", index=False)
+
 import os
-import shutil
+import pandas as pd
 
-# --- adjust these paths ---
-SPLIT_DIR = r"C:\Users\Andrea Chiang\Downloads\Finished Annotations\FOR YOLO TRAINING_BBs_8--10-10_split_with_augemented"
-DEST_DIR  = r"C:\Users\Andrea Chiang\Downloads\Finished Annotations\data_80-10-10_augmented"
+# 1) Path to your CSV
+csv_path = r"C:\Users\Andrea Chiang\Downloads\python\thesis\Image Processing Models Testing\Unet\dataset\test\results\mapped_cellpose\cell_coords_labeled.csv"
 
-# 1) create flat target folders
-for data_type in ("images", "labels"):
-    for split in ("train", "val", "test"):
-        os.makedirs(os.path.join(DEST_DIR, data_type, split), exist_ok=True)
+# 2) Your three partitions
+partitions = {
+    'train': r'C:\Users\Andrea Chiang\Downloads\Finished Annotations\FOR YOLO TRAINING_80-10-10_split\data_80-10-10\images\train',
+    'val':   r'C:\Users\Andrea Chiang\Downloads\Finished Annotations\FOR YOLO TRAINING_80-10-10_split\data_80-10-10\images\val',
+    'test':  r'C:\Users\Andrea Chiang\Downloads\Finished Annotations\FOR YOLO TRAINING_80-10-10_split\data_80-10-10\images\test',
+}
 
-# 2) walk group → subfolder → images/labels splits
-for group in os.listdir(SPLIT_DIR):
-    group_path = os.path.join(SPLIT_DIR, group)
-    if not os.path.isdir(group_path):
-        continue
+# Load the CSV
+df = pd.read_csv(csv_path)
 
-    # inside each group (e.g. ALL_resized), iterate its subfolders (23BM66, 24BMLY, …)
-    for sub in os.listdir(group_path):
-        sub_path = os.path.join(group_path, sub)
-        if not os.path.isdir(sub_path):
-            continue
+# 3) Create a slide_id that matches your filenames like "ALL_resized_23BM133_Snap_002"
+df['slide_id'] = (
+    df['source_image']
+      .str.replace(r'\.jpg$', '', regex=True)
+      .str.replace('/', '_')
+)
 
-        for data_type in ("images", "labels"):
-            for split in ("train", "val", "test"):
-                src_dir = os.path.join(sub_path, data_type, split)
-                if not os.path.isdir(src_dir):
-                    continue
+# 4) Loop through each split, list its slides, filter & count
+results = []
+for split, img_dir in partitions.items():
+    # get all image basenames (no extension) in this folder
+    slides = [
+        os.path.splitext(fn)[0]
+        for fn in os.listdir(img_dir)
+        if fn.lower().endswith(('.jpg','.jpeg','.png','.tif','.tiff'))
+    ]
+    # filter rows whose slide_id is in this split
+    df_split = df[df['slide_id'].isin(slides)]
+    counts = df_split['predicted_label'].value_counts()
+    results.append({
+        'split': split,
+        'ALL':  counts.get('ALL', 0),
+        'HEM':  counts.get('HEM', 0),
+        'TOTAL': len(df_split)
+    })
 
-                dst_dir = os.path.join(DEST_DIR, data_type, split)
-                for fname in os.listdir(src_dir):
-                    src = os.path.join(src_dir, fname)
-                    # prefix with both group and subfolder to avoid any name clashes
-                    new_name = f"{group}_{sub}_{fname}"
-                    dst = os.path.join(dstir := dst_dir, new_name)
-                    shutil.copy2(src, dst)
+# 5) Show as a DataFrame
+res_df = pd.DataFrame(results)
+print(res_df)
 
-# 3) (optional) print counts to verify
-for data_type in ("images", "labels"):
-    for split in ("train", "val", "test"):
-        cnt = len(os.listdir(os.path.join(DEST_DIR, data_type, split)))
-        print(f"{data_type}/{split}: {cnt} files")
 
 

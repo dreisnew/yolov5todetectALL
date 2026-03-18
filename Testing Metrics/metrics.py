@@ -351,125 +351,465 @@
 # else:
 #     print("🚫 No data to summarize.")
 
-#region cellpose
+#region cellpose/omnipose metrics
+# import os
+# import re
+# import numpy as np
+# import pandas as pd
+# import matplotlib.pyplot as plt
+# from tifffile import imread
+# from glob import glob
+# from sklearn.metrics import (
+#     jaccard_score, f1_score, precision_score, recall_score,
+#     confusion_matrix
+# )
+# from skimage.metrics import hausdorff_distance
+
+# # ─── CONFIG ────────────────────────────────────────────────────────────────
+# gt_folder = r"C:\Users\Andrea Chiang\Downloads\For Testing"
+# pred_dir  = (
+#     r"C:\Users\Andrea Chiang\Downloads\python\thesis"
+#     r"\Image Processing Models Testing\Unet\dataset\test"
+#     r"\results\omnipose_2nd_try_wbc"
+# )
+
+# # regex to split "REMISSIONS_resized24BMSD" → ("REMISSIONS_resized", "24BMSD")
+# split_pat = re.compile(r"(.*resized)(.+)")
+
+# results = []
+
+# # 1) gather all GT .tif under every subfolder
+# gt_paths = sorted(glob(os.path.join(gt_folder, "**", "*.tif"), recursive=True))
+
+# for gt_path in gt_paths:
+#     # raw subfolder name (e.g. "REMISSIONS_resized24BMSD")
+#     raw_sub = os.path.basename(os.path.dirname(gt_path))
+#     # image stem (e.g. "Snap_015")
+#     stem = os.path.splitext(os.path.basename(gt_path))[0]
+
+#     # split into ("REMISSIONS_resized", "24BMSD")
+#     m = split_pat.match(raw_sub)
+#     if not m:
+#         print(f"❌ Unexpected GT folder '{raw_sub}', skipping.")
+#         continue
+#     root_folder, patient = m.groups()
+
+#     # look only in the matching pred sub-folder
+#     pred_sub = os.path.join(pred_dir, root_folder, patient)
+#     pattern  = os.path.join(pred_sub, f"{stem}_wbc_mask.tif")
+#     matches  = glob(pattern)
+
+#     if len(matches) != 1:
+#         print(f"❌ Found {len(matches)} matches for '{stem}_wbc_mask.tif' in {pred_sub}, skipping.")
+#         continue
+
+#     pred_path = matches[0]
+#     print(f"\n🔍 Checking {root_folder}\\{patient}\\{stem}")
+#     print(f"   GT:   {gt_path}")
+#     print(f"   PRED: {pred_path}")
+
+#     # load & binarize
+#     gt_mask   = imread(gt_path).astype(bool)
+#     pred_mask = imread(pred_path).astype(bool)
+
+#     if gt_mask.shape != pred_mask.shape:
+#         print(f"⚠️ Shape mismatch GT{gt_mask.shape} vs PRED{pred_mask.shape}, skipping.")
+#         continue
+
+#     # compute metrics
+#     gt_flat, pred_flat = gt_mask.ravel(), pred_mask.ravel()
+#     iou       = jaccard_score(gt_flat, pred_flat)
+#     dice      = f1_score(gt_flat, pred_flat)
+#     precision = precision_score(gt_flat, pred_flat)
+#     recall    = recall_score(gt_flat, pred_flat)
+#     hausdorff = hausdorff_distance(gt_mask, pred_mask)
+#     tn, fp, fn, tp = confusion_matrix(gt_flat, pred_flat).ravel()
+#     accuracy    = (tp + tn) / (tp + tn + fp + fn)
+#     specificity = tn / (tn + fp)
+
+#     results.append({
+#         "Subfolder":   f"{root_folder}/{patient}",
+#         "Image":       stem,
+#         "IoU":         iou,
+#         "Dice":        dice,
+#         "Precision":   precision,
+#         "Recall":      recall,
+#         "Hausdorff":   hausdorff,
+#         "Accuracy":    accuracy,
+#         "Specificity": specificity,
+#         "TP": tp, "TN": tn, "FP": fp, "FN": fn
+#     })
+#     print("   ✅ Metrics computed.")
+
+# # ─── END OF LOOP ────────────────────────────────────────────────────────────
+
+# # 2) save CSV
+# df = pd.DataFrame(results)
+# csv_out = "omnipose_metrics.csv"
+# df.to_csv(csv_out, index=False)
+# print(f"\n✅ Saved metrics to {csv_out}")
+
+# # 3) average metrics & boxplot
+# if not df.empty:
+#     avg = df[["IoU","Dice","Precision","Recall","Hausdorff","Accuracy","Specificity"]].mean()
+#     print("\n📋 AVERAGE METRICS:")
+#     for m, v in avg.items():
+#         if m == "Hausdorff":
+#             tag = "Excellent" if v < 5 else "Acceptable" if v < 10 else "Poor"
+#         else:
+#             tag = "Excellent" if v > 0.9 else "Good" if v > 0.7 else "Fair" if v > 0.5 else "Poor"
+#         print(f"  {m}: {v:.3f} → {tag}")
+
+#     plt.figure(figsize=(12,6))
+#     df[["IoU","Dice","Precision","Recall","Hausdorff","Accuracy","Specificity"]].boxplot()
+#     plt.xticks(rotation=45)
+#     plt.title("Segmentation Metrics Distribution")
+#     plt.tight_layout()
+#     plt.savefig("omnipose_boxplot.png")
+#     print("📊 Boxplot saved to omnipose_boxplot_.png")
+# else:
+#     print("🚫 No data to summarize.")
+
+#region metrics geo
+# import os
+# import numpy as np
+# import pandas as pd
+# import matplotlib.pyplot as plt
+# from tifffile import imread
+# from glob import glob
+# from sklearn.metrics import (
+#     jaccard_score, f1_score, precision_score, recall_score,
+#     confusion_matrix
+# )
+# from skimage.metrics import hausdorff_distance
+
+# # ─── CONFIG ────────────────────────────────────────────────────────────────
+# gt_folder = r"C:\Users\Andrea Chiang\Downloads\For Testing"
+# pred_dir  = r"C:\Users\Andrea Chiang\Downloads\python\thesis\Image Processing Models Testing\RegionsBased\Folder Run Results"
+# # ────────────────────────────────────────────────────────────────────────────
+
+# results = []
+
+# # 1) Grab every .tif under your binary‐masks folder (recursive)
+# gt_paths = sorted(glob(os.path.join(gt_folder, "**", "*.tif"), recursive=True))
+
+# for gt_path in gt_paths:
+#     # Compute relative path under gt_folder:
+#     # e.g. "REMISSIONS_resized/24BM67/Snap_008.tif"
+#     rel = os.path.relpath(gt_path, gt_folder)
+#     parts = rel.split(os.path.sep)
+#     if len(parts) < 3:
+#         print(f"❌ Unexpected layout for {gt_path}, skipping.")
+#         continue
+
+#     root_folder = parts[0]    # e.g. "ALL_resized" or "REMISSIONS_resized"
+#     patient     = parts[1]    # e.g. "23BM66" or "24BM49"
+#     img_name    = parts[2]    # e.g. "Snap_008.tif"
+
+#     # ── SKIP any “instmask” tiffs ───────────────────────────────────────────
+#     if img_name.endswith("_instmask.tif"):
+#         continue
+#     # ─────────────────────────────────────────────────────────────────────────
+
+#     # Build the expected pred filename: "<base>_mask.tif"
+#     base      = os.path.splitext(img_name)[0]
+#     mask_name = f"{base}_mask.tif"
+#     pred_path = os.path.join(pred_dir, root_folder, patient, mask_name)
+
+#     if not os.path.exists(pred_path):
+#         print(f"❌ Missing prediction for {rel}, skipping.")
+#         continue
+
+#     print(f"\n🔍 Checking: {rel}")
+#     print(f"   GT:   {gt_path}")
+#     print(f"   PRED: {pred_path}")
+
+#     # 2) Load & binarize
+#     gt_mask   = imread(gt_path).astype(bool)
+#     pred_mask = imread(pred_path).astype(bool)
+
+#     # 3) Shape check
+#     if gt_mask.shape != pred_mask.shape:
+#         print(f"   ⚠️ Shape mismatch: GT {gt_mask.shape}, PRED {pred_mask.shape}")
+#         continue
+
+#     # 4) Compute metrics
+#     gt_flat, pred_flat = gt_mask.ravel(), pred_mask.ravel()
+#     iou       = jaccard_score(gt_flat, pred_flat)
+#     dice      = f1_score(gt_flat, pred_flat)
+#     precision = precision_score(gt_flat, pred_flat)
+#     recall    = recall_score(gt_flat, pred_flat)
+#     hausdorff = hausdorff_distance(gt_mask, pred_mask)
+#     tn, fp, fn, tp = confusion_matrix(gt_flat, pred_flat).ravel()
+#     accuracy    = (tp + tn) / (tp + tn + fp + fn)
+#     specificity = tn / (tn + fp)
+
+#     subdir = f"{root_folder}/{patient}"
+#     results.append({
+#         "Subfolder":   subdir,
+#         "Image":       base,
+#         "IoU":         iou,
+#         "Dice":        dice,
+#         "Precision":   precision,
+#         "Recall":      recall,
+#         "Hausdorff":   hausdorff,
+#         "Accuracy":    accuracy,
+#         "Specificity": specificity,
+#         "TP": tp, "TN": tn, "FP": fp, "FN": fn
+#     })
+#     print("   ✅ Metrics computed.")
+
+# # 5) Save results
+# df = pd.DataFrame(results)
+# csv_out = "geometric.csv"
+# df.to_csv(csv_out, index=False)
+# print(f"\n✅ Saved all metrics to {csv_out}")
+
+# # 6) Summary & Boxplot
+# if not df.empty:
+#     avg = df[["IoU","Dice","Precision","Recall","Hausdorff","Accuracy","Specificity"]].mean()
+#     def interpret(m, v):
+#         if m == "Hausdorff":
+#             return "Excellent" if v < 5 else "Acceptable" if v < 10 else "Poor"
+#         else:
+#             return "Excellent" if v > 0.9 else "Good" if v > 0.7 else "Fair" if v > 0.5 else "Poor"
+
+#     print("\n📋 AVERAGE METRICS:")
+#     for m, v in avg.items():
+#         print(f"  {m}: {v:.3f} → {interpret(m, v)}")
+
+#     plt.figure(figsize=(12, 6))
+#     df[["IoU","Dice","Precision","Recall","Hausdorff","Accuracy","Specificity"]].boxplot()
+#     plt.xticks(rotation=45)
+#     plt.title("Segmentation Metrics Distribution")
+#     plt.tight_layout()
+#     plt.savefig("geometric_boxplot_full.png")
+#     print("📊 Saved boxplot as geometric_boxplot_full.png")
+# else:
+#     print("🚫 No data to summarize.")
+    
+#region metrics regions
+# import os
+# import numpy as np
+# import pandas as pd
+# import matplotlib.pyplot as plt
+# from tifffile import imread
+# from glob import glob
+# from sklearn.metrics import (
+#     jaccard_score,
+#     f1_score,
+#     precision_score,
+#     recall_score,
+#     confusion_matrix,
+# )
+# from skimage.metrics import hausdorff_distance
+
+# # ─── CONFIGURATION ─────────────────────────────────────────────────────────
+# # Ground-truth masks folder (only Snap_###.tif files)
+# gt_folder = r"C:\Users\Andrea Chiang\Downloads\For Testing"
+# # Prediction masks folder (mirrored structure under "Folder Run Results")
+# pred_dir  = r"C:\Users\Andrea Chiang\Downloads\python\thesis\Image Processing Models Testing\RegionsBased\Folder Run Results"
+# # Output CSV path
+# output_csv = "folder_metrics.csv"
+# # ────────────────────────────────────────────────────────────────────────────
+
+# results = []
+
+# # Find all GT TIFFs named Snap_*.tif
+# gt_paths = sorted(glob(os.path.join(gt_folder, "**", "Snap_*.tif"), recursive=True))
+
+# for gt_path in gt_paths:
+#     rel = os.path.relpath(gt_path, gt_folder)
+#     parts = rel.split(os.path.sep)
+#     if len(parts) < 3:
+#         continue
+#     root_folder, patient, img_name = parts[0], parts[1], parts[2]
+#     # Skip instance masks
+#     if img_name.lower().endswith("_instmask.tif"):
+#         continue
+#     base = os.path.splitext(img_name)[0]
+
+#     # Build prediction path
+#     pred_path = os.path.join(pred_dir, root_folder, patient, f"{base}_mask.tif")
+#     if not os.path.exists(pred_path):
+#         print(f"❌ Missing prediction for {rel}, expected at {pred_path}")
+#         continue
+
+#     print(f"\n🔍 Checking: {rel}")
+#     print(f"   GT:   {gt_path}")
+#     print(f"   PRED: {pred_path}")
+
+#     # Load and binarize
+#     gt_mask = imread(gt_path).astype(bool)
+#     pred_mask = imread(pred_path).astype(bool)
+
+#     # Shape check
+#     if gt_mask.shape != pred_mask.shape:
+#         print(f"   ⚠️ Shape mismatch: GT {gt_mask.shape}, PRED {pred_mask.shape}")
+#         continue
+
+#     # Flatten arrays
+#     gt_flat, pred_flat = gt_mask.ravel(), pred_mask.ravel()
+
+#     # Compute metrics
+#     iou        = jaccard_score(gt_flat, pred_flat)
+#     dice       = f1_score(gt_flat, pred_flat)
+#     precision  = precision_score(gt_flat, pred_flat)
+#     recall     = recall_score(gt_flat, pred_flat)
+#     haus       = hausdorff_distance(gt_mask, pred_mask)
+#     tn, fp, fn, tp = confusion_matrix(gt_flat, pred_flat).ravel()
+#     accuracy   = (tp + tn) / (tp + tn + fp + fn)
+#     specificity= tn / (tn + fp) if (tn + fp) > 0 else np.nan
+
+#     results.append({
+#         "Subfolder":    f"{root_folder}/{patient}",
+#         "Image":        base,
+#         "IoU":          iou,
+#         "Dice":         dice,
+#         "Precision":    precision,
+#         "Recall":       recall,
+#         "Hausdorff":    haus,
+#         "Accuracy":     accuracy,
+#         "Specificity":  specificity,
+#         "TP":           int(tp),
+#         "TN":           int(tn),
+#         "FP":           int(fp),
+#         "FN":           int(fn),
+#     })
+
+# # Save results to CSV
+# df = pd.DataFrame(results)
+# df.to_csv(output_csv, index=False)
+# print(f"\n✅ Saved metrics for {len(df)} images to {output_csv}")
+
+# # 6) Summary & Boxplot
+# if not df.empty:
+#     avg = df[["IoU","Dice","Precision","Recall","Hausdorff","Accuracy","Specificity"]].mean()
+#     def interpret(m, v):
+#         if m == "Hausdorff":
+#             return "Excellent" if v < 5 else "Acceptable" if v < 10 else "Poor"
+#         else:
+#             return "Excellent" if v > 0.9 else "Good" if v > 0.7 else "Fair" if v > 0.5 else "Poor"
+
+#     print("\n📋 AVERAGE METRICS:")
+#     for m, v in avg.items():
+#         print(f"  {m}: {v:.3f} → {interpret(m, v)}")
+
+#     plt.figure(figsize=(12, 6))
+#     df[["IoU","Dice","Precision","Recall","Hausdorff","Accuracy","Specificity"]].boxplot()
+#     plt.xticks(rotation=45)
+#     plt.title("Segmentation Metrics Distribution")
+#     plt.tight_layout()
+#     plt.savefig("geometric_boxplot_full.png")
+#     print("📊 Saved boxplot as geometric_boxplot_full.png")
+# else:
+#     print("🚫 No data to summarize.")
+
+#region metrics ML
 import os
-import re
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from tifffile import imread
 from glob import glob
 from sklearn.metrics import (
-    jaccard_score, f1_score, precision_score, recall_score,
+    jaccard_score, f1_score,
+    precision_score, recall_score,
     confusion_matrix
 )
 from skimage.metrics import hausdorff_distance
+import matplotlib.pyplot as plt
 
-# ─── CONFIG ────────────────────────────────────────────────────────────────
-gt_folder = r"C:\Users\Andrea Chiang\Downloads\For Testing"
-pred_dir  = (
-    r"C:\Users\Andrea Chiang\Downloads\python\thesis"
-    r"\Image Processing Models Testing\Unet\dataset\test"
-    r"\results\omnipose_2nd_try_wbc"
-)
-
-# regex to split "REMISSIONS_resized24BMSD" → ("REMISSIONS_resized", "24BMSD")
-split_pat = re.compile(r"(.*resized)(.+)")
+# ─── CONFIG ────────────────────────────────────────────────────────────
+gt_root   = r"C:\Users\Andrea Chiang\Downloads\For Testing"
+pred_root = r"C:\Users\Andrea Chiang\Downloads\python\thesis\Image Processing Models Testing\ML\Folder Run Results3"
+out_csv   = "ML_metrics.csv"
+# ───────────────────────────────────────────────────────────────────────
 
 results = []
 
-# 1) gather all GT .tif under every subfolder
-gt_paths = sorted(glob(os.path.join(gt_folder, "**", "*.tif"), recursive=True))
+# 1) Grab *only* your *_mask.tif files under pred_root
+pred_paths = sorted(glob(os.path.join(pred_root, "**", "*_mask.tif"), recursive=True))
 
-for gt_path in gt_paths:
-    # raw subfolder name (e.g. "REMISSIONS_resized24BMSD")
-    raw_sub = os.path.basename(os.path.dirname(gt_path))
-    # image stem (e.g. "Snap_015")
-    stem = os.path.splitext(os.path.basename(gt_path))[0]
-
-    # split into ("REMISSIONS_resized", "24BMSD")
-    m = split_pat.match(raw_sub)
-    if not m:
-        print(f"❌ Unexpected GT folder '{raw_sub}', skipping.")
+for pred_path in pred_paths:
+    # e.g. rel = "REMISSIONS_resized/24BMSD/Snap_005_mask.tif"
+    rel_pred = os.path.relpath(pred_path, pred_root)
+    parts    = rel_pred.split(os.path.sep)
+    if len(parts) < 3:
         continue
-    root_folder, patient = m.groups()
+    root_folder, patient, mask_name = parts
 
-    # look only in the matching pred sub-folder
-    pred_sub = os.path.join(pred_dir, root_folder, patient)
-    pattern  = os.path.join(pred_sub, f"{stem}_wbc_mask.tif")
-    matches  = glob(pattern)
+    # strip off the trailing "_mask.tif"
+    base = mask_name[:-len("_mask.tif")]
 
-    if len(matches) != 1:
-        print(f"❌ Found {len(matches)} matches for '{stem}_wbc_mask.tif' in {pred_sub}, skipping.")
+    # build the corresponding GT path
+    gt_path = os.path.join(gt_root, root_folder, patient, base + ".tif")
+    if not os.path.exists(gt_path):
+        print(f"❌ GT missing for {rel_pred}, expected at {gt_path}")
         continue
 
-    pred_path = matches[0]
-    print(f"\n🔍 Checking {root_folder}\\{patient}\\{stem}")
-    print(f"   GT:   {gt_path}")
+    print(f"\n🔍 Checking: {root_folder}/{patient}/{base}.tif")
+    print(f"   GT : {gt_path}")
     print(f"   PRED: {pred_path}")
 
-    # load & binarize
+    # 2) load & binarize
     gt_mask   = imread(gt_path).astype(bool)
-    pred_mask = imread(pred_path).astype(bool)
+    pred_mask = imread(pred_path)
+    if pred_mask.dtype != bool:
+        pred_mask = pred_mask > 0
 
+    # 3) shape check
     if gt_mask.shape != pred_mask.shape:
-        print(f"⚠️ Shape mismatch GT{gt_mask.shape} vs PRED{pred_mask.shape}, skipping.")
+        print(f"   ⚠️ Shape mismatch: GT {gt_mask.shape}, PRED {pred_mask.shape}")
         continue
 
-    # compute metrics
+    # 4) flatten & metrics
     gt_flat, pred_flat = gt_mask.ravel(), pred_mask.ravel()
-    iou       = jaccard_score(gt_flat, pred_flat)
-    dice      = f1_score(gt_flat, pred_flat)
-    precision = precision_score(gt_flat, pred_flat)
-    recall    = recall_score(gt_flat, pred_flat)
-    hausdorff = hausdorff_distance(gt_mask, pred_mask)
+    iou       = jaccard_score( gt_flat, pred_flat )
+    dice      = f1_score(    gt_flat, pred_flat )
+    prec      = precision_score(gt_flat, pred_flat)
+    rec       = recall_score(   gt_flat, pred_flat)
+    haus      = hausdorff_distance(gt_mask, pred_mask)
     tn, fp, fn, tp = confusion_matrix(gt_flat, pred_flat).ravel()
-    accuracy    = (tp + tn) / (tp + tn + fp + fn)
-    specificity = tn / (tn + fp)
+    acc       = (tp + tn) / (tp + tn + fp + fn)
+    spec      = tn / (tn + fp) if (tn + fp) > 0 else np.nan
 
     results.append({
         "Subfolder":   f"{root_folder}/{patient}",
-        "Image":       stem,
+        "Image":       base,
         "IoU":         iou,
         "Dice":        dice,
-        "Precision":   precision,
-        "Recall":      recall,
-        "Hausdorff":   hausdorff,
-        "Accuracy":    accuracy,
-        "Specificity": specificity,
+        "Precision":   prec,
+        "Recall":      rec,
+        "Hausdorff":   haus,
+        "Accuracy":    acc,
+        "Specificity": spec,
         "TP": tp, "TN": tn, "FP": fp, "FN": fn
     })
-    print("   ✅ Metrics computed.")
 
-# ─── END OF LOOP ────────────────────────────────────────────────────────────
-
-# 2) save CSV
+# 5) Save CSV
 df = pd.DataFrame(results)
-csv_out = "omnipose_metrics.csv"
-df.to_csv(csv_out, index=False)
-print(f"\n✅ Saved metrics to {csv_out}")
+df.to_csv(out_csv, index=False)
+print(f"\n✅ Saved {len(df)} rows to {out_csv}")
 
-# 3) average metrics & boxplot
+# 6) Summary & Boxplot
 if not df.empty:
     avg = df[["IoU","Dice","Precision","Recall","Hausdorff","Accuracy","Specificity"]].mean()
-    print("\n📋 AVERAGE METRICS:")
-    for m, v in avg.items():
-        if m == "Hausdorff":
-            tag = "Excellent" if v < 5 else "Acceptable" if v < 10 else "Poor"
+    def interpret(m, v):
+        if m=="Hausdorff":
+            return "Excellent" if v<5 else "Acceptable" if v<10 else "Poor"
         else:
-            tag = "Excellent" if v > 0.9 else "Good" if v > 0.7 else "Fair" if v > 0.5 else "Poor"
-        print(f"  {m}: {v:.3f} → {tag}")
+            return "Excellent" if v>0.9 else "Good" if v>0.7 else "Fair" if v>0.5 else "Poor"
+
+    print("\n📋 AVERAGE METRICS:")
+    for m,v in avg.items():
+        print(f"  {m}: {v:.3f} → {interpret(m,v)}")
 
     plt.figure(figsize=(12,6))
     df[["IoU","Dice","Precision","Recall","Hausdorff","Accuracy","Specificity"]].boxplot()
     plt.xticks(rotation=45)
     plt.title("Segmentation Metrics Distribution")
     plt.tight_layout()
-    plt.savefig("omnipose_boxplot.png")
-    print("📊 Boxplot saved to omnipose_boxplot_.png")
+    plt.savefig("ML_boxplot_full.png")
+    print("📊 Saved boxplot as ML_boxplot_full.png")
 else:
     print("🚫 No data to summarize.")
-
-
-
-
